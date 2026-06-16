@@ -145,9 +145,24 @@
   @media (prefers-reduced-motion:reduce){
     html{scroll-behavior:auto} .chips,#toTop,.col{transition:none}
   }
+
+  /* キャッシュ完了バナー */
+  #sw-banner{
+    position:fixed; top:0; left:0; right:0; z-index:999;
+    background:linear-gradient(90deg,#1a3a1a,#1e4d1e);
+    color:#7ee87e; font-size:13px; font-weight:700;
+    text-align:center; padding:10px 16px;
+    border-bottom:1px solid #4caf50;
+    letter-spacing:.5px;
+    transform:translateY(-100%);
+    transition:transform .35s ease;
+    pointer-events:none;
+  }
+  #sw-banner.show{ transform:translateY(0); }
 </style>
 </head>
 <body>
+<div id="sw-banner" role="status" aria-live="polite">✅ オフライン対応完了！機内モードでも使えます</div>
 <header>
   <h1>大人のしりとり辞典</h1>
   <p>知れば差がつく、一目置かれる言葉たち</p>
@@ -546,7 +561,21 @@ setNavH();
 
 /* PWA Service Worker登録 */
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  addEventListener("load", () => {
+    navigator.serviceWorker.register("service-worker.js")
+      .then((reg) => console.log("[SW] 登録成功:", reg.scope))
+      .catch((err) => console.warn("[SW] 登録失敗:", err));
+
+    /* SW からのメッセージを受け取ってバナー表示 */
+    navigator.serviceWorker.addEventListener("message", (e) => {
+      if (e.data && e.data.type === "SW_CACHED") {
+        const banner = document.getElementById("sw-banner");
+        if (!banner) return;
+        banner.classList.add("show");
+        setTimeout(() => banner.classList.remove("show"), 4000);
+      }
+    });
+  });
 }
 </script>
 </body>

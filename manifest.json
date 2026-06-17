@@ -2,7 +2,7 @@
   "name": "大人のしりとり辞典",
   "short_name": "大人のしりとり",
   "description": "カタカナ語・専門用語・雑学語彙を五十音順に引ける大人向けしりとり辞典。",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

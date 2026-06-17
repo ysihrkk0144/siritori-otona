@@ -3,7 +3,7 @@
    バージョンを上げるたびに CACHE_NAME の番号を増やす
    （ASSETSを追加・削除した場合も必ず上げること）
    ===================================================== */
-const CACHE_NAME = "adult-shiritori-v2";
+const CACHE_NAME = "adult-shiritori-v3";
 
 /* キャッシュするファイル一覧
    ※ service-worker.js 自身はここに含めない */
@@ -67,6 +67,18 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   /* GET 以外はそのままスルー */
   if (e.request.method !== "GET") return;
+
+  /* ページ遷移（HTMLナビゲーション）は index.html に正規化してキャッシュを見る。
+     "./" と "./index.html" でキャッシュキーがズレてヒットしない問題を防ぐ。 */
+  if (e.request.mode === "navigate") {
+    e.respondWith(
+      caches.match("./index.html").then((hit) => {
+        if (hit) return hit;
+        return fetch(e.request).catch(() => caches.match("./index.html"));
+      })
+    );
+    return;
+  }
 
   e.respondWith(
     caches.match(e.request).then((hit) => {

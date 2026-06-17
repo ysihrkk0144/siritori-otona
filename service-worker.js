@@ -3,7 +3,7 @@
    バージョンを上げるたびに CACHE_NAME の番号を増やす
    （ASSETSを追加・削除した場合も必ず上げること）
    ===================================================== */
-const CACHE_NAME = "adult-shiritori-v3";
+const CACHE_NAME = "adult-shiritori-v4";
 
 /* キャッシュするファイル一覧
    ※ service-worker.js 自身はここに含めない */
@@ -26,12 +26,16 @@ self.addEventListener("install", (e) => {
               if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
               return cache.put(url, res);
             })
-            .catch((err) => console.warn("[SW] キャッシュ失敗:", url, err))
+            .catch((err) => {
+              console.warn("[SW] キャッシュ失敗:", url, err);
+              throw err;
+            })
         )
       ).then((results) => {
-        const ok  = results.filter((r) => r.status === "fulfilled").length;
-        const ng  = results.filter((r) => r.status === "rejected").length;
+        const ok = results.filter((r) => r.status === "fulfilled").length;
+        const ng = results.filter((r) => r.status === "rejected").length;
         console.log(`[SW] install 完了 — 成功:${ok} 失敗:${ng}`);
+        self.__installResult = { ok, ng };
       })
     )
   );
@@ -53,9 +57,15 @@ self.addEventListener("activate", (e) => {
       )
     ).then(() => {
       /* キャッシュ完了をページへ通知 */
+      const result = self.__installResult || { ok: -1, ng: -1 };
       self.clients.matchAll({ includeUncontrolled: true }).then((clients) => {
         clients.forEach((client) =>
-          client.postMessage({ type: "SW_CACHED", cacheName: CACHE_NAME })
+          client.postMessage({
+            type: "SW_CACHED",
+            cacheName: CACHE_NAME,
+            ok: result.ok,
+            ng: result.ng
+          })
         );
       });
     })

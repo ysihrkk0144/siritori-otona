@@ -146,23 +146,30 @@
     html{scroll-behavior:auto} .chips,#toTop,.col{transition:none}
   }
 
-  /* キャッシュ完了バナー */
+  /* 診断パネル */
   #sw-banner{
     position:fixed; top:0; left:0; right:0; z-index:999;
-    background:linear-gradient(90deg,#1a3a1a,#1e4d1e);
-    color:#7ee87e; font-size:13px; font-weight:700;
-    text-align:center; padding:10px 16px;
+    background:#0a1410; color:#7ee87e; font-size:11px; font-weight:600;
+    text-align:left; padding:8px 12px;
     border-bottom:1px solid #4caf50;
-    letter-spacing:.5px;
+    letter-spacing:.3px; line-height:1.5;
+    max-height:40vh; overflow-y:auto;
     transform:translateY(-100%);
-    transition:transform .35s ease;
-    pointer-events:none;
+    transition:transform .3s ease;
+    white-space:pre-wrap; word-break:break-all;
+    font-family:monospace;
   }
   #sw-banner.show{ transform:translateY(0); }
+  #sw-banner .ok{color:#7ee87e}
+  #sw-banner .ng{color:#ff7676}
+  #sw-banner .close-diag{
+    position:absolute; top:4px; right:8px; background:none; border:none;
+    color:#fff; font-size:16px; cursor:pointer; padding:4px 8px;
+  }
 </style>
 </head>
 <body>
-<div id="sw-banner" role="status" aria-live="polite">✅ オフライン対応完了！機内モードでも使えます</div>
+<div id="sw-banner" role="status" aria-live="polite"></div>
 <header>
   <h1>大人のしりとり辞典</h1>
   <p>知れば差がつく、一目置かれる言葉たち</p>
@@ -559,22 +566,62 @@ addEventListener("scroll", () => toTop.classList.toggle("show", scrollY > 400), 
 addEventListener("resize", setNavH);
 setNavH();
 
-/* PWA Service Worker登録 */
+/* ===== PWA Service Worker 診断パネル ===== */
+const diag = document.getElementById("sw-banner");
+const diagLines = [];
+function diagLog(line, isOk) {
+  const cls = isOk === true ? "ok" : isOk === false ? "ng" : "";
+  diagLines.push(`<span class="${cls}">${line}</span>`);
+  diag.innerHTML =
+    '<button class="close-diag" onclick="this.parentElement.classList.remove(\'show\')">×</button>' +
+    diagLines.join("\n");
+  diag.classList.add("show");
+}
+
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  diagLog(`[診断開始] URL: ${location.href}`);
+  diagLog(`[診断] SW対応ブラウザ: あり`, true);
+
   addEventListener("load", () => {
     navigator.serviceWorker.register("service-worker.js")
-      .then((reg) => console.log("[SW] 登録成功:", reg.scope))
-      .catch((err) => console.warn("[SW] 登録失敗:", err));
+      .then((reg) => {
+        diagLog(`[登録] 成功 scope=${reg.scope}`, true);
 
-    /* SW からのメッセージを受け取ってバナー表示 */
+        const logState = () => {
+          const sw = reg.installing || reg.waiting || reg.active;
+          if (sw) diagLog(`[状態] ${sw.state}`, sw.state === "activated");
+        };
+        logState();
+        if (reg.installing) reg.installing.addEventListener("statechange", (ev) => {
+          diagLog(`[状態変化] installing → ${ev.target.state}`, ev.target.state === "activated");
+        });
+        if (reg.waiting) reg.waiting.addEventListener("statechange", (ev) => {
+          diagLog(`[状態変化] waiting → ${ev.target.state}`, ev.target.state === "activated");
+        });
+      })
+      .catch((err) => diagLog(`[登録] 失敗: ${err.message || err}`, false));
+
     navigator.serviceWorker.addEventListener("message", (e) => {
       if (e.data && e.data.type === "SW_CACHED") {
-        const banner = document.getElementById("sw-banner");
-        if (!banner) return;
-        banner.classList.add("show");
-        setTimeout(() => banner.classList.remove("show"), 4000);
+        diagLog(`[キャッシュ完了] ${e.data.cacheName} 成功:${e.data.ok} 失敗:${e.data.ng}`, e.data.ng === 0);
       }
     });
+
+    /* キャッシュの実際の中身を確認 */
+    setTimeout(() => {
+      caches.keys().then((keys) => {
+        diagLog(`[キャッシュ一覧] ${keys.join(", ") || "(なし)"}`, keys.length > 0);
+        keys.forEach((k) => {
+          caches.open(k).then((c) => c.keys()).then((reqs) => {
+            diagLog(`[${k}] ${reqs.map(r => r.url.split("/").pop() || "/").join(", ")}`);
+          });
+        });
+      });
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        if (regs.length === 0) diagLog("[登録一覧] 登録なし！", false);
+        regs.forEach((r) => diagLog(`[登録一覧] scope=${r.scope} active=${!!r.active}`, !!r.active));
+      });
+    }, 1500);
   });
 }
 </script>

@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0D1117">
-<title>大人のしりとり辞典</title>
+<title>大人版しりとり辞典</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="大人のしりとり">
+<meta name="apple-mobile-web-app-title" content="大人版しりとり">
 <style>
   :root{
     --bg:#0D1117; --card:#161B22; --card2:#1C2333; --ink:#E6EDF3; --sub:#8B949E;
@@ -146,32 +146,112 @@
     html{scroll-behavior:auto} .chips,#toTop,.col{transition:none}
   }
 
-  /* 診断パネル */
-  #sw-banner{
-    position:fixed; top:0; left:0; right:0; z-index:999;
-    background:#0a1410; color:#7ee87e; font-size:11px; font-weight:600;
-    text-align:left; padding:8px 12px;
-    border-bottom:1px solid #4caf50;
-    letter-spacing:.3px; line-height:1.5;
-    max-height:40vh; overflow-y:auto;
-    transform:translateY(-100%);
-    transition:transform .3s ease;
-    white-space:pre-wrap; word-break:break-all;
-    font-family:monospace;
+  /* ===== キャッシュ完了バナー（上部・自動で消える） ===== */
+  #cache-banner{
+    position:fixed; top:0; left:0; right:0; z-index:998;
+    font-size:13px; font-weight:700; text-align:center;
+    padding:10px 36px; letter-spacing:.3px;
+    transform:translateY(-100%); transition:transform .3s ease;
   }
-  #sw-banner.show{ transform:translateY(0); }
-  #sw-banner .ok{color:#7ee87e}
-  #sw-banner .ng{color:#ff7676}
-  #sw-banner .close-diag{
-    position:absolute; top:4px; right:8px; background:none; border:none;
-    color:#fff; font-size:16px; cursor:pointer; padding:4px 8px;
+  #cache-banner.show{ transform:translateY(0); }
+  #cache-banner.ok{ background:#13321a; color:#7ee87e; border-bottom:1px solid #4caf50; }
+  #cache-banner.warn{ background:#3a2a10; color:#ffc266; border-bottom:1px solid #cc8a1f; }
+  #cache-banner .cb-close{
+    position:absolute; top:6px; right:10px; background:none; border:none;
+    color:inherit; font-size:16px; cursor:pointer; padding:4px 8px; opacity:.8;
+  }
+
+  /* ===== 更新確認バナー（下部・操作待ち） ===== */
+  #update-banner{
+    position:fixed; left:12px; right:12px; bottom:14px; z-index:998;
+    background:#162032; border:1px solid #4FC3F7; border-radius:14px;
+    color:var(--ink); padding:14px 16px; box-shadow:var(--shadow);
+    display:none; align-items:center; gap:10px; flex-wrap:wrap;
+    font-size:14px;
+  }
+  #update-banner.show{ display:flex; }
+  #update-banner .ub-text{ flex:1; min-width:160px; }
+  #update-banner button{
+    border:none; border-radius:8px; padding:8px 14px; font-size:13px;
+    font-weight:700; cursor:pointer;
+  }
+  #update-banner .ub-update{ background:var(--a1); color:#06222e; }
+  #update-banner .ub-later{ background:transparent; color:var(--sub); border:1px solid var(--border); }
+
+  /* ===== 診断FABボタン ===== */
+  #diag-fab{
+    position:fixed; right:16px; bottom:18px; z-index:900;
+    width:48px; height:48px; border-radius:50%;
+    background:var(--card); border:1px solid var(--border);
+    color:var(--a1); font-size:20px; display:flex;
+    align-items:center; justify-content:center;
+    box-shadow:var(--shadow); cursor:pointer;
+  }
+
+  /* ===== 診断フルスクリーンパネル ===== */
+  #diag-panel{
+    position:fixed; inset:0; z-index:1000;
+    background:#0a0e14; color:#cfe8ff;
+    font-family:monospace; font-size:12.5px; line-height:1.7;
+    padding:16px; overflow-y:auto;
+    display:none;
+  }
+  #diag-panel.show{ display:block; }
+  #diag-panel h2{
+    font-family:inherit; font-size:15px; color:#fff; margin:0 0 14px;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  #diag-panel .dp-close{
+    background:none; border:1px solid var(--border); color:#fff;
+    border-radius:8px; padding:6px 12px; font-size:13px; cursor:pointer;
+  }
+  #diag-panel .dp-row{ margin:4px 0; word-break:break-all; white-space:pre-wrap; }
+  #diag-panel .dp-ok{ color:#7ee87e; }
+  #diag-panel .dp-ng{ color:#ff7676; font-weight:700; }
+  #diag-panel .dp-section{
+    margin-top:16px; padding-top:10px; border-top:1px solid #20283a;
+    color:#8B949E; font-size:11px; letter-spacing:.5px;
+  }
+  #diag-panel .dp-actions{
+    display:flex; gap:8px; margin-top:18px; flex-wrap:wrap;
+  }
+  #diag-panel .dp-actions button{
+    flex:1; min-width:120px; border:1px solid var(--a1); background:rgba(79,195,247,.1);
+    color:var(--a1); border-radius:10px; padding:10px; font-size:13px;
+    font-weight:700; cursor:pointer;
   }
 </style>
 </head>
 <body>
-<div id="sw-banner" role="status" aria-live="polite"></div>
+<!-- キャッシュ完了バナー -->
+<div id="cache-banner" role="status" aria-live="polite">
+  <button class="cb-close" onclick="document.getElementById('cache-banner').classList.remove('show')">×</button>
+  <span id="cache-banner-text"></span>
+</div>
+
+<!-- 更新確認バナー -->
+<div id="update-banner">
+  <span class="ub-text">🆕 新しいバージョンがあります</span>
+  <button class="ub-update" id="ub-update-btn">更新する</button>
+  <button class="ub-later" id="ub-later-btn">あとで</button>
+</div>
+
+<!-- 診断FABボタン -->
+<button id="diag-fab" aria-label="診断パネルを開く" onclick="openDiagPanel()">🔧</button>
+
+<!-- 診断フルスクリーンパネル -->
+<div id="diag-panel">
+  <h2>診断パネル
+    <button class="dp-close" onclick="closeDiagPanel()">閉じる ✕</button>
+  </h2>
+  <div id="diag-body"></div>
+  <div class="dp-actions">
+    <button onclick="requestDiagnostic()">🔄 再取得</button>
+    <button onclick="manualUpdateCheck()">🌐 最新版を確認</button>
+  </div>
+</div>
 <header>
-  <h1>大人のしりとり辞典</h1>
+  <h1>大人版しりとり辞典</h1>
   <p>知れば差がつく、一目置かれる言葉たち</p>
   <span class="header-badge">ADULT EDITION</span>
 </header>
@@ -566,66 +646,148 @@ addEventListener("scroll", () => toTop.classList.toggle("show", scrollY > 400), 
 addEventListener("resize", setNavH);
 setNavH();
 
-/* ===== PWA Service Worker 診断パネル ===== */
-const diag = document.getElementById("sw-banner");
-const diagLines = [];
-function diagLog(line, isOk) {
-  const cls = isOk === true ? "ok" : isOk === false ? "ng" : "";
-  diagLines.push(`<span class="${cls}">${line}</span>`);
-  diag.innerHTML =
-    '<button class="close-diag" onclick="this.parentElement.classList.remove(\'show\')">×</button>' +
-    diagLines.join("\n");
-  diag.classList.add("show");
+/* =====================================================
+   PWA Service Worker 管理
+   方針：自動更新チェックは一切行わない。
+         登録のみ自動、更新は「最新版を確認」ボタンからのみ。
+   ===================================================== */
+let swReg = null;
+const EXPECTED_ASSET_COUNT = 4; /* service-worker.js の ASSET_PATHS と同数 */
+
+const cacheBanner = document.getElementById("cache-banner");
+const cacheBannerText = document.getElementById("cache-banner-text");
+function showCacheBanner(text, ok) {
+  cacheBannerText.textContent = text;
+  cacheBanner.className = ok ? "show ok" : "show warn";
+  clearTimeout(showCacheBanner._t);
+  showCacheBanner._t = setTimeout(() => cacheBanner.classList.remove("show"), 4000);
+}
+
+const updateBanner = document.getElementById("update-banner");
+function showUpdateBanner() { updateBanner.classList.add("show"); }
+function hideUpdateBanner() { updateBanner.classList.remove("show"); }
+
+const diagPanel = document.getElementById("diag-panel");
+const diagBody = document.getElementById("diag-body");
+function openDiagPanel() { diagPanel.classList.add("show"); requestDiagnostic(); renderRegState(); }
+function closeDiagPanel() { diagPanel.classList.remove("show"); }
+
+function dpLine(label, value, ok) {
+  const cls = ok === true ? "dp-ok" : ok === false ? "dp-ng" : "";
+  return `<div class="dp-row ${cls}">${label}: ${value}</div>`;
+}
+
+/* レジストレーション周りの状態を診断パネルに描画 */
+function renderRegState() {
+  if (!("serviceWorker" in navigator)) {
+    diagBody.innerHTML = dpLine("Service Worker対応", "なし（この機能は使えません）", false);
+    return;
+  }
+  const controller = navigator.serviceWorker.controller;
+  let html = "";
+  html += dpLine("URL", location.href);
+  html += dpLine("オンライン状態", navigator.onLine ? "オンライン" : "オフライン");
+  html += dpLine("controller", controller ? "あり（SWに制御されている）" : "なし（要再インストール）", !!controller);
+
+  if (swReg) {
+    html += dpLine("登録scope", swReg.scope, true);
+    const sw = swReg.installing || swReg.waiting || swReg.active;
+    if (sw) html += dpLine("SWの状態", sw.state, sw.state === "activated");
+    html += dpLine("waiting（新バージョン待機中）", swReg.waiting ? "あり" : "なし", !swReg.waiting);
+  } else {
+    html += dpLine("登録", "まだ完了していません", false);
+  }
+  html += `<div class="dp-section">キャッシュ詳細（🔄再取得で更新）</div>`;
+  html += `<div id="dp-cache-area">取得中…</div>`;
+  diagBody.innerHTML = html;
+}
+
+/* SWへ診断要求を送り、結果をpostMessageで受け取る */
+function requestDiagnostic() {
+  if (navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({ type: "GET_DIAGNOSTIC" });
+  } else {
+    const area = document.getElementById("dp-cache-area");
+    if (area) area.innerHTML = dpLine("キャッシュ確認", "controllerが無いため取得不可", false);
+  }
+}
+
+/* 「最新版を確認」：このタイミングだけ通信が発生する */
+function manualUpdateCheck() {
+  if (!swReg) return;
+  const area = document.getElementById("dp-cache-area");
+  swReg.update()
+    .then(() => { if (area) area.insertAdjacentHTML("beforeend", dpLine("最新版チェック", "実行しました", true)); })
+    .catch((err) => { if (area) area.insertAdjacentHTML("beforeend", dpLine("最新版チェック失敗", err.message, false)); });
 }
 
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  diagLog(`[診断開始] URL: ${location.href}`);
-  diagLog(`[診断] navigator.onLine = ${navigator.onLine}`, navigator.onLine);
-  diagLog(`[診断] controller = ${navigator.serviceWorker.controller ? "あり（SWに制御されている）" : "なし（SWに制御されていない！）"}`, !!navigator.serviceWorker.controller);
-
   addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js", { updateViaCache: "none" })
+    navigator.serviceWorker
+      .register("./service-worker.js", { scope: "./", updateViaCache: "none" })
       .then((reg) => {
-        diagLog(`[登録] 成功 scope=${reg.scope}`, true);
+        swReg = reg;
 
-        const logState = () => {
-          const sw = reg.installing || reg.waiting || reg.active;
-          if (sw) diagLog(`[状態] ${sw.state}`, sw.state === "activated");
-        };
-        logState();
-        if (reg.installing) reg.installing.addEventListener("statechange", (ev) => {
-          diagLog(`[状態変化] installing → ${ev.target.state}`, ev.target.state === "activated");
-        });
-        if (reg.waiting) reg.waiting.addEventListener("statechange", (ev) => {
-          diagLog(`[状態変化] waiting → ${ev.target.state}`, ev.target.state === "activated");
+        /* 新しいSWが見つかってインストールされた時だけバナーを出す。
+           ここでは絶対に skipWaiting や reload を自動実行しない。 */
+        reg.addEventListener("updatefound", () => {
+          const newSW = reg.installing;
+          if (!newSW) return;
+          newSW.addEventListener("statechange", () => {
+            if (newSW.state === "installed" && reg.waiting) {
+              showUpdateBanner();
+            }
+          });
         });
       })
-      .catch((err) => diagLog(`[登録] 失敗: ${err.message || err}`, false));
+      .catch((err) => console.warn("[SW] 登録失敗:", err));
 
+    /* SWからの通知を受け取る */
     navigator.serviceWorker.addEventListener("message", (e) => {
-      if (e.data && e.data.type === "SW_CACHED") {
-        diagLog(`[キャッシュ完了] ${e.data.cacheName} 成功:${e.data.ok} 失敗:${e.data.ng}`, e.data.ng === 0);
+      const data = e.data || {};
+
+      if (data.type === "SW_INSTALL_DONE") {
+        if (data.ng === 0) {
+          showCacheBanner(`✅ オフライン準備完了！ (${data.ok}/${data.total}件)`, true);
+        } else {
+          showCacheBanner(`⚠️ 一部未保存 (${data.ok}/${data.total}件、失敗${data.ng}件)`, false);
+        }
+      }
+
+      if (data.type === "SW_DIAGNOSTIC") {
+        const area = document.getElementById("dp-cache-area");
+        if (!area) return;
+        const ok = data.count === data.expected;
+        let html = dpLine("キャッシュ名", data.cacheName, true);
+        html += dpLine("キャッシュ済み件数", `${data.count} / ${data.expected}`, ok);
+        html += data.urls.map((u) => `<div class="dp-row">・${u.split("/").pop() || "/"}</div>`).join("");
+        area.innerHTML = html;
       }
     });
 
-    /* キャッシュの実際の中身を確認 */
-    setTimeout(() => {
-      diagLog(`[再確認] controller = ${navigator.serviceWorker.controller ? "あり" : "なし"}`, !!navigator.serviceWorker.controller);
-      caches.keys().then((keys) => {
-        diagLog(`[キャッシュ一覧] ${keys.join(", ") || "(なし)"}`, keys.length > 0);
-        keys.forEach((k) => {
-          caches.open(k).then((c) => c.keys()).then((reqs) => {
-            diagLog(`[${k}] ${reqs.map(r => r.url.split("/").pop() || "/").join(", ")}`);
-          });
-        });
-      }).catch((err) => diagLog(`[キャッシュ一覧] 取得失敗: ${err.message}`, false));
-      navigator.serviceWorker.getRegistrations().then((regs) => {
-        if (regs.length === 0) diagLog("[登録一覧] 登録なし！", false);
-        regs.forEach((r) => diagLog(`[登録一覧] scope=${r.scope} active=${!!r.active}`, !!r.active));
-      }).catch((err) => diagLog(`[登録一覧] 取得失敗: ${err.message}`, false));
-    }, 1500);
+    /* controllerchange：更新ボタン押下後にSWが切り替わったらリロードする
+       （これは「更新する」を押した結果としてのみ発生する） */
+    let reloading = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloading) return;
+      reloading = true;
+      location.reload();
+    });
   });
 }
+
+/* 「更新する」ボタン：このタイミングだけ skipWaiting を送る */
+document.getElementById("ub-update-btn").addEventListener("click", () => {
+  if (swReg && swReg.waiting) {
+    swReg.waiting.postMessage({ type: "SKIP_WAITING" });
+  }
+  hideUpdateBanner();
+});
+
+/* 「あとで」ボタン：何もしない。バナーを閉じるだけ */
+document.getElementById("ub-later-btn").addEventListener("click", () => {
+  hideUpdateBanner();
+});
 </script>
 </body>
 </html>

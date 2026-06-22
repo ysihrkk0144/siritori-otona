@@ -1,114 +1,191 @@
 /* =====================================================
    Service Worker — 大人のしりとり辞典
-   バージョンを上げるたびに CACHE_NAME の番号を増やす
-   （ASSETSを追加・削除した場合も必ず上げること）
+   方針：Cache Only（完全オフライン優先）+ 手動更新のみ
+
+   ★ 重要な約束（このファイルを編集する人へ）
+   - install時に skipWaiting() は絶対に呼ばない
+   - fetchで自動的にネットワークへ取りに行く積極動作はしない
+   - ASSETSを追加・削除したら CACHE_NAME を必ず上げる
+   - './' と './index.html' は両方入れない（index.htmlに一本化）
    ===================================================== */
-const CACHE_NAME = "adult-shiritori-v5";
+
+const CACHE_NAME = "adult-shiritori-v7";
 
 /* キャッシュするファイル一覧（相対パス）
-   ※ service-worker.js 自身はここに含めない */
+   ※ service-worker.js 自身はここに含めない
+   ※ './' は入れない。navigate は index.html に一本化する */
 const ASSET_PATHS = [
-  "./",
   "./index.html",
   "./manifest.json",
   "./icon-192.png",
   "./icon-512.png"
 ];
 
-/* 相対パスを SW のスコープ基準で完全URL化しておく。
+/* 相対パスを SW のスコープ基準で完全URL化する。
    SW が一度終了→再起動したあとでも self.location は
    常にこのファイルの設置場所を指すため、相対パス解決の
    揺れによるキャッシュキー不一致を防げる。 */
 const ASSETS = ASSET_PATHS.map((p) => new URL(p, self.location).href);
 const INDEX_URL = new URL("./index.html", self.location).href;
+const EXPECTED_COUNT = ASSETS.length;
 
-/* ── install：個別キャッシュ（1ファイル失敗しても全滅しない） ── */
+/* ───────────────────────────────────────
+   ユーティリティ：リトライ付きfetch
+   モバイル回線の不安定さに対応するため最大3回試行する。
+   cacheオプションは "no-store" を使う。
+   （"reload" はモバイル端末で不安定動作することが判明している）
+   ─────────────────────────────────────── */
+async function fetchWithRetry(url, maxRetry = 3) {
+  let lastErr = null;
+  for (let i = 0; i < maxRetry; i++) {
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res;
+    } catch (err) {
+      lastErr = err;
+      if (i < maxRetry - 1) {
+        await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+      }
+    }
+  }
+  throw lastErr;
+}
+
+/* 全クライアントへ通知 */
+async function notifyClients(payload) {
+  const clients = await self.clients.matchAll({ includeUncontrolled: true });
+  clients.forEach((c) => c.postMessage(payload));
+}
+
+/* ───────────────────────────────────────
+   install：個別キャッシュ（リトライ付き・1件失敗で全滅させない）
+   ★ skipWaiting() はここで呼ばない（手動更新方式のため）
+   ─────────────────────────────────────── */
 self.addEventListener("install", (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) =>
-      Promise.allSettled(
-        ASSETS.map((url) =>
-          fetch(url, { cache: "reload" })
-            .then((res) => {
-              if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
-              return cache.put(url, res);
-            })
-            .catch((err) => {
-              console.warn("[SW] キャッシュ失敗:", url, err);
-              throw err;
-            })
-        )
-      ).then((results) => {
-        const ok = results.filter((r) => r.status === "fulfilled").length;
-        const ng = results.filter((r) => r.status === "rejected").length;
-        console.log(`[SW] install 完了 — 成功:${ok} 失敗:${ng}`);
-        self.__installResult = { ok, ng };
-      })
-    )
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+
+      const results = await Promise.allSettled(
+        ASSETS.map(async (url) => {
+          const res = await fetchWithRetry(url, 3);
+          await cache.put(url, res);
+          return url;
+        })
+      );
+
+      const ok = results.filter((r) => r.status === "fulfilled").length;
+      const ngList = results
+        .filter((r) => r.status === "rejected")
+        .map((r, i) => ASSETS[i])
+        .filter(Boolean);
+      const ng = results.length - ok;
+
+      console.log(`[SW] install 完了 — 成功:${ok} 失敗:${ng}`);
+      if (ng > 0) console.warn("[SW] キャッシュ失敗ファイル:", ngList);
+
+      await notifyClients({
+        type: "SW_INSTALL_DONE",
+        cacheName: CACHE_NAME,
+        ok,
+        ng,
+        total: EXPECTED_COUNT,
+        failedUrls: ngList
+      });
+      /* skipWaiting() はここでは呼ばない */
+    })()
   );
-  /* 待機中の SW をすぐ有効化 */
-  self.skipWaiting();
 });
 
-/* ── activate：古いキャッシュを削除 ── */
+/* ───────────────────────────────────────
+   activate：古いキャッシュを削除
+   ─────────────────────────────────────── */
 self.addEventListener("activate", (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
         keys
           .filter((k) => k !== CACHE_NAME)
           .map((k) => {
             console.log("[SW] 古いキャッシュ削除:", k);
             return caches.delete(k);
           })
-      )
-    ).then(() => {
-      /* キャッシュ完了をページへ通知 */
-      const result = self.__installResult || { ok: -1, ng: -1 };
-      self.clients.matchAll({ includeUncontrolled: true }).then((clients) => {
-        clients.forEach((client) =>
-          client.postMessage({
-            type: "SW_CACHED",
-            cacheName: CACHE_NAME,
-            ok: result.ok,
-            ng: result.ng
-          })
-        );
-      });
-    })
+      );
+      await self.clients.claim();
+      await notifyClients({ type: "SW_ACTIVATED", cacheName: CACHE_NAME });
+    })()
   );
-  self.clients.claim();
 });
 
-/* ── fetch：GETのみ処理、キャッシュ優先（キャッシュファースト） ── */
+/* ───────────────────────────────────────
+   fetch：Cache Only方式
+   - GET以外・http以外はスルー
+   - navigate は index.html キャッシュを最優先
+   - その他はキャッシュにあれば返す。無ければネットワークを
+     試すが、失敗時は何も返さず warn のみ（積極的な自動取得はしない）
+   ─────────────────────────────────────── */
 self.addEventListener("fetch", (e) => {
-  /* GET 以外はそのままスルー */
-  if (e.request.method !== "GET") return;
+  const req = e.request;
 
-  /* chrome-extension: などスキームが http/https でないものはスルー */
-  if (!e.request.url.startsWith("http")) return;
+  if (req.method !== "GET") return;
+  if (!req.url.startsWith("http")) return;
 
-  /* ページ遷移（HTMLナビゲーション）は完全URLで index.html のキャッシュを
-     最優先で返す。ネットワークには行かず、キャッシュがあれば即応答する
-     ことで、オフライン時・SW再起動直後でも確実に表示させる。 */
-  if (e.request.mode === "navigate") {
+  if (req.mode === "navigate") {
     e.respondWith(
       caches.match(INDEX_URL).then((hit) => {
         if (hit) return hit;
-        return fetch(e.request).catch(() => caches.match(INDEX_URL));
+        return fetch(req).catch(() => {
+          console.warn("[SW] navigate キャッシュ無し・ネットワーク失敗:", req.url);
+          return new Response("オフラインのため表示できません", {
+            status: 503,
+            headers: { "Content-Type": "text/plain; charset=utf-8" }
+          });
+        });
       })
     );
     return;
   }
 
   e.respondWith(
-    caches.match(e.request).then((hit) => {
+    caches.match(req).then((hit) => {
       if (hit) return hit;
-      /* キャッシュになければネットワークから取得 */
-      return fetch(e.request).catch(() => {
-        /* オフラインかつキャッシュなし → index.html でフォールバック */
-        return caches.match(INDEX_URL);
+      return fetch(req).catch(() => {
+        console.warn("[SW] キャッシュ無し・ネットワーク失敗:", req.url);
+        /* 何も返さない（積極的な自動取得・代替表示はしない） */
+        return new Response("", { status: 504 });
       });
     })
   );
+});
+
+/* ───────────────────────────────────────
+   message：診断要求・手動更新の受付
+   ─────────────────────────────────────── */
+self.addEventListener("message", (e) => {
+  const data = e.data || {};
+
+  if (data.type === "GET_DIAGNOSTIC") {
+    e.waitUntil(
+      (async () => {
+        const cache = await caches.open(CACHE_NAME);
+        const reqs = await cache.keys();
+        const urls = reqs.map((r) => r.url);
+        await notifyClients({
+          type: "SW_DIAGNOSTIC",
+          cacheName: CACHE_NAME,
+          count: urls.length,
+          expected: EXPECTED_COUNT,
+          urls
+        });
+      })()
+    );
+    return;
+  }
+
+  /* 「更新する」ボタンが押された時だけ呼ばれる */
+  if (data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
